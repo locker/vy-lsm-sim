@@ -45,6 +45,8 @@ class Stat:
         self.total_size = 0
         # Number of key-value pairs at the largest LSM tree level.
         self.last_level_size = 0
+        # Number of completed memory dumps.
+        self.dump_count = 0
         # Number of key-value pairs dumped to disk.
         self.dump_out = 0
         # Number of key-value pairs read by compaction.
@@ -282,15 +284,15 @@ class Timeline:
 
 # Responsible for scheduling background compaction.
 class Scheduler:
-    def __init__(self, timeline, ranges):
+    def __init__(self, stat, timeline, ranges):
+        # Global statistics.
+        self.stat = stat
         # Timeline object for scheduling events.
         self.timeline = timeline
         # Ranges to schedule compaction for.
         self.ranges = ranges
         # Number of compaction tasks in progress.
         self.compaction_tasks = 0
-        # Number of completed memory dumps.
-        self.dump_count = 0
 
         self.schedule_dump()
 
@@ -300,7 +302,7 @@ class Scheduler:
     def complete_dump(self):
         for it in self.ranges:
             it.dump()
-        self.dump_count += 1
+        self.stat.dump_count += 1
         self.schedule_dump()
         self.schedule_compaction()
 
@@ -343,7 +345,7 @@ class Simulator:
         self.stat = Stat()
         self.timeline = Timeline()
         self.ranges = [Range(self.stat) for _ in range(args.range_count)]
-        self.scheduler = Scheduler(self.timeline, self.ranges)
+        self.scheduler = Scheduler(self.stat, self.timeline, self.ranges)
 
         self.stat_func = {
             'write-ampl': lambda: self.stat.write_ampl,
@@ -359,7 +361,7 @@ class Simulator:
         print('Running simulation...')
         start = time.time()
         self.timeline.add_event(0, self.report)
-        while self.scheduler.dump_count < args.dump_count:
+        while self.stat.dump_count < args.dump_count:
             self.timeline.process_event()
         stop = time.time()
         print('Simulation completed in %0.2f seconds' % (stop - start))
