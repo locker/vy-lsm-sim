@@ -28,8 +28,11 @@ parser.add_argument('--dump-count', type=int, default=1000,
                     help='Number of memory dumps to simulate')
 parser.add_argument('--resolution', type=float, default=10,
                     help='Number of times stats are taken between dumps')
+parser.add_argument('--read-ampl-pct', type=float, default=0.9,
+                    help=('Percentile of {run count: range_count} histogram '
+                          'to use for calculating read amplification'))
 parser.add_argument('stat_func', type=str, default='write-ampl',
-                    help=('write-ampl | space-ampl | '
+                    help=('read-ampl | write-ampl | space-ampl | '
                           'compaction-queue | compaction-ratio'))
 args = parser.parse_args()
 
@@ -55,6 +58,34 @@ class Stat:
         self.compaction_out = 0
         # Number of key-value pairs awaiting compaction.
         self.compaction_queue_size = 0
+        # Histogram: number of runs => number of ranges.
+        self.run_histogram = []
+
+    def account_range(self, range_):
+        while range_.run_count >= len(self.run_histogram):
+            self.run_histogram.append(0)
+        self.run_histogram[range_.run_count] += 1
+
+    def unaccount_range(self, range_):
+        assert(self.run_histogram[range_.run_count] > 0)
+        self.run_histogram[range_.run_count] -= 1
+
+    @property
+    def run_count_max(self):
+        for i in reversed(range(len(self.run_histogram))):
+            if self.run_histogram[i] > 0:
+                return i
+        return 0
+
+    @property
+    def read_ampl(self):
+        range_count = 0
+        total_range_count = sum(self.run_histogram)
+        for i in range(len(self.run_histogram)):
+            range_count += self.run_histogram[i]
+            if range_count >= total_range_count * args.read_ampl_pct:
+                return i
+        return 0
 
     @property
     def write_ampl(self):
@@ -137,6 +168,8 @@ class Range:
         # If compaction is in progress, slice of compacted runs.
         self.compaction_slice = None
 
+        self.stat.account_range(self)
+
     # Simulate memory dump.
     def dump(self):
         size = int(args.uniq_key_count / args.fanout / args.range_count)
@@ -144,8 +177,10 @@ class Range:
         self.stat.total_size += size
         if not self.runs:
             self.stat.last_level_size += size
+        self.stat.unaccount_range(self)
         self.dumps_since_compaction += 1
         self.runs.append(Run(size))
+        self.stat.account_range(self)
         self.update_compaction_prio()
 
     # Number of runs in this range.
@@ -186,7 +221,9 @@ class Range:
             self.stat.last_level_size -= self.runs[0].size
             self.stat.last_level_size += new_run.size
 
+        self.stat.unaccount_range(self)
         self.runs[self.compaction_slice] = [new_run]
+        self.stat.account_range(self)
         self.compaction_slice = None
 
         self.update_compaction_prio()
@@ -348,6 +385,7 @@ class Simulator:
         self.scheduler = Scheduler(self.stat, self.timeline, self.ranges)
 
         self.stat_func = {
+            'read-ampl': lambda: self.stat.read_ampl,
             'write-ampl': lambda: self.stat.write_ampl,
             'space-ampl': lambda: self.stat.space_ampl,
             'compaction-queue': lambda: self.stat.compaction_queue,
