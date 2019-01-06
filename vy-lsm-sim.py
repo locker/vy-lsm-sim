@@ -7,7 +7,8 @@ from heapq import heappush, heappop
 
 parser = argparse.ArgumentParser(
     description=('Simulate Tarantool Vinyl LSM tree performance in case of '
-                 'a write-only workload')
+                 'a write-only workload'),
+    formatter_class=argparse.ArgumentDefaultsHelpFormatter
 )
 parser.add_argument('--uniq-key-count', type=int, default=10000000,
                     help='Number of unique keys updated by the workload')
