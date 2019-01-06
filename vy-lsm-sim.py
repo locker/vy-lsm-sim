@@ -22,7 +22,7 @@ parser.add_argument('--run-count-per-level', type=int, default=2,
                     help='Max number of runs per LSM tree level')
 parser.add_argument('--compaction-threads', type=int, default=4,
                     help='Number of threads performing compaction')
-parser.add_argument('--compaction-rate', type=float, default=1,
+parser.add_argument('--compaction-rate', type=float, default=2,
                     help='Ratio of compaction rate to dump rate')
 parser.add_argument('--dump-count', type=int, default=1000,
                     help='Number of memory dumps to simulate')
