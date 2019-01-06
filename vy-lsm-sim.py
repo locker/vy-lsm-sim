@@ -31,9 +31,6 @@ parser.add_argument('--resolution', type=float, default=10,
 parser.add_argument('--read-ampl-pct', type=float, default=0.9,
                     help=('Percentile of {run count: range_count} histogram '
                           'to use for calculating read amplification'))
-parser.add_argument('stat_func', type=str, default='write-ampl',
-                    help=('read-ampl | write-ampl | space-ampl | '
-                          'compaction-queue | compaction-ratio'))
 args = parser.parse_args()
 
 print('Arguments:')
@@ -384,16 +381,12 @@ class Simulator:
         self.ranges = [Range(self.stat) for _ in range(args.range_count)]
         self.scheduler = Scheduler(self.stat, self.timeline, self.ranges)
 
-        self.stat_func = {
-            'read-ampl': lambda: self.stat.read_ampl,
-            'write-ampl': lambda: self.stat.write_ampl,
-            'space-ampl': lambda: self.stat.space_ampl,
-            'compaction-queue': lambda: self.stat.compaction_queue,
-            'compaction-ratio': lambda: self.stat.compaction_ratio,
-        }[args.stat_func]
-
+        self.stat_funcs = ('read_ampl', 'write_ampl',
+                           'space_ampl', 'compaction_queue')
         self.stat_x = []
-        self.stat_y = []
+        self.stat_y = {}
+        for f in self.stat_funcs:
+            self.stat_y[f] = []
 
     def run(self):
         print('Running simulation...')
@@ -406,14 +399,19 @@ class Simulator:
         print()
 
         print('Plotting data...')
-        plot.plot(self.stat_x, self.stat_y)
-        plot.xlabel('dump-count')
-        plot.ylabel(args.stat_func)
+        assert(len(self.stat_funcs) == 4)
+        for i in range(len(self.stat_funcs)):
+            f = self.stat_funcs[i]
+            plot.subplot(2, 2, i + 1)
+            plot.plot(self.stat_x, self.stat_y[f])
+            plot.xlabel('dump-count')
+            plot.ylabel(f)
         plot.show()
 
     def report(self):
         self.stat_x.append(self.timeline.now)
-        self.stat_y.append(self.stat_func())
+        for f in self.stat_funcs:
+            self.stat_y[f].append(getattr(self.stat, f))
         self.timeline.add_event(1 / args.resolution, self.report)
 
 
