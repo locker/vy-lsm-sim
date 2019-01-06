@@ -406,6 +406,7 @@ class Simulator:
             plot.plot(self.stat_x, self.stat_y[f])
             plot.xlabel('dump-count')
             plot.ylabel(f)
+            plot.grid()
         plot.show()
 
     def report(self):
