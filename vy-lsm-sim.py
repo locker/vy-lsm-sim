@@ -4,6 +4,7 @@ import time
 import argparse
 import matplotlib.pyplot as plot
 from heapq import heappush, heappop
+from random import random
 
 parser = argparse.ArgumentParser(
     description=('Simulate Tarantool Vinyl LSM tree performance in case of '
@@ -25,6 +26,16 @@ parser.add_argument('--compaction-threads', type=int, default=4,
                     help='Number of threads performing compaction')
 parser.add_argument('--compaction-rate', type=float, default=2,
                     help='Ratio of compaction rate to dump rate')
+parser.add_argument('--deferred-compaction-prob', type=float, default=0,
+                    help=('Probability of deferring compaction at each level '
+                          '(exceeding --run-count-per-level by 1 without'
+                          'triggering compaction)'))
+parser.add_argument('--deferred-compaction-start', type=int, default=0,
+                    help=('Number of dumps to skip before enabling '
+                          '--deferred-compaction-prob'))
+parser.add_argument('--deferred-compaction-stop', type=int, default=1000000,
+                    help=('Number of dumps after which to disable '
+                          '--deferred-compaction-prob'))
 parser.add_argument('--dump-count', type=int, default=1000,
                     help='Number of memory dumps to simulate')
 parser.add_argument('--resolution', type=float, default=10,
@@ -108,6 +119,8 @@ class Run:
     def __init__(self, size):
         # Number of keys stored in the run.
         self.size = size
+        # Seed used for compaction randomization.
+        self.seed = random()
 
     # Create a new run by compacting compacted_runs.
     #
@@ -276,7 +289,12 @@ class Range:
                 # Keep pushing the run down until we find an
                 # appropriate level for it.
 
-            if level_run_count > args.run_count_per_level:
+            max_run_count = args.run_count_per_level
+            if (run.seed < args.deferred_compaction_prob and
+                    self.stat.dump_count >= args.deferred_compaction_start and
+                    self.stat.dump_count <= args.deferred_compaction_stop):
+                max_run_count += 1
+            if level_run_count > max_run_count:
                 # The number of runs at the current level exceeds
                 # the configured maximum. Arrange for compaction.
                 # We compact all runs at this level and upper
