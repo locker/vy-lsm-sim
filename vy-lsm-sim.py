@@ -170,8 +170,6 @@ class Range:
         self.stat = stat
         # Runs sorted by age: oldest run comes first.
         self.runs = []
-        # Number of dumps since the last major compaction.
-        self.dumps_since_compaction = 0
         # Number of runs that need to be compacted.
         self.compaction_prio = 0
         # Total size of runs that need to be compacted.
@@ -189,7 +187,6 @@ class Range:
         if not self.runs:
             self.stat.last_level_size += size
         self.stat.unaccount_range(self)
-        self.dumps_since_compaction += 1
         self.runs.append(Run(size))
         self.stat.account_range(self)
         self.update_compaction_prio()
@@ -211,8 +208,6 @@ class Range:
         assert(run_count > 1 and run_count <= self.run_count)
         self.compaction_slice = slice(self.run_count - run_count,
                                       self.run_count)
-        if self.compaction_slice.start == 0:  # major compaction
-            self.dumps_since_compaction = 0
         return sum(run.size for run in self.runs[self.compaction_slice])
 
     # Complete compaction started with start_compaction().
